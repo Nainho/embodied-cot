@@ -189,7 +189,7 @@ class Exp_DinoSigLIP_224px_LIBERO_90(Exp_DinoSigLIP_224px_Bridge):
 
     expected_world_size: int = 2 # 8
     global_batch_size: int = 128 # 256
-    per_device_batch_size: int = 16 # 32
+    per_device_batch_size: int = 8 # 32
 
 
 # = [64 GPU] DINO-SigLIP 224px + OXE Magic Soup++ =

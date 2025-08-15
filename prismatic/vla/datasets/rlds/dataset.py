@@ -756,7 +756,7 @@ def make_interleaved_dataset(
         
         ds_name = dataset_kwargs["name"]
         all_dataset_statistics[ds_name] = filtered_stats
-        dataset_len = filtered_stats["num_trajectories"]
+        dataset_len = filtered_stats["num_transitions"]
         
         dataset = apply_trajectory_transforms(
             dataset.repeat(),
