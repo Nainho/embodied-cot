@@ -1,0 +1,75 @@
+{
+  "os": "Linux-5.15.0-130-generic-x86_64-with-glibc2.35",
+  "python": "CPython 3.10.18",
+  "startedAt": "2025-08-14T06:39:27.535970Z",
+  "args": [
+    "--vla_path",
+    "openvla/openvla-7b",
+    "--data_root_dir",
+    "/home/work/AGI_NIH/data/embodied_features_and_demos_libero",
+    "--dataset_name",
+    "libero_90",
+    "--run_root_dir",
+    "/home/work/AGI_NIH/checkpoints/ecot_libero_finetune",
+    "--adapter_tmp_dir",
+    "/home/work/AGI_NIH/checkpoints/ecot_libero_finetune/lora",
+    "--lora_rank",
+    "32",
+    "--max_steps",
+    "200000",
+    "--batch_size",
+    "4",
+    "--grad_accumulation_steps",
+    "1",
+    "--learning_rate",
+    "5e-4",
+    "--image_aug",
+    "False",
+    "--wandb_project",
+    "ecot",
+    "--wandb_entity",
+    "AGI_CSI"
+  ],
+  "program": "/home/work/AGI_NIH/embodied-CoT/vla-scripts/finetune.py",
+  "codePath": "vla-scripts/finetune.py",
+  "codePathLocal": "vla-scripts/finetune.py",
+  "git": {
+    "remote": "https://github.com/Nainho/embodied-cot.git",
+    "commit": "03044770cd0f7763b74003a899d537c54776be67"
+  },
+  "email": "gnih1226@gmail.com",
+  "root": "/home/work/AGI_NIH/embodied-CoT",
+  "host": "main1",
+  "executable": "/home/work/AGI_NIH/anaconda3/envs/openvla/bin/python3.10",
+  "cpu_count": 56,
+  "cpu_count_logical": 48,
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "gpu_count": 2,
+  "disk": {
+    "/": {
+      "total": "935062740992",
+      "used": "684897423360"
+    }
+  },
+  "memory": {
+    "total": "513248591872"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA H100 80GB HBM3",
+      "memoryTotal": "85520809984",
+      "cudaCores": 16896,
+      "architecture": "Hopper",
+      "uuid": "GPU-f2ff4815-68e7-955a-5166-d91399cef176"
+    },
+    {
+      "name": "NVIDIA H100 80GB HBM3",
+      "memoryTotal": "85520809984",
+      "cudaCores": 16896,
+      "architecture": "Hopper",
+      "uuid": "GPU-ca1bdbf3-6aaa-2fd6-a5c5-fc2887f85a17"
+    }
+  ],
+  "cudaVersion": "12.8",
+  "writerId": "3sz9gipj1dbj9hi10xvvqi1prjwmu72e"
+}
