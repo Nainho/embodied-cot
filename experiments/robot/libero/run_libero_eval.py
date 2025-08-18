@@ -61,9 +61,9 @@ class GenerateConfig:
     #################################################################################################################
     model_family: str = "llava"                    # Model family
     pretrained_checkpoint: Union[str, Path] = Path(             # Pretrained VLA checkpoint to load
-        #"/home/work/AGI_NIH/checkpoints/ecot_libero/prism-dinosiglip-224px+mx-libero-90+n1+b16+x7/checkpoints/"
-        #"step-010000-epoch-72-loss=0.0171.pt"  # 3 task, subtask only
-        "/home/work/AGI_NIH/checkpoints/ecot_libero_finetune/ecot-openvla-7b-oxe+libero_90+b16+lr-0.0005+lora-r32+dropout-0.0" # fine-tuning, full reasoning
+        "/home/work/AGI_NIH/checkpoints/ecot_libero_2/prism-dinosiglip-224px+mx-libero-90+n1+b16+x7/checkpoints/"
+        "step-005000-epoch-36-loss=0.0207.pt"  # 3 task, subtask only
+        #"/home/work/AGI_NIH/checkpoints/ecot_libero_finetune/ecot-openvla-7b-oxe+libero_90+b16+lr-0.0005+lora-r32+dropout-0.0" # fine-tuning, full reasoning
         #"/home/work/AGI_NIH/checkpoints/ecot_libero_finetune/openvla-7b+libero_90+b16+lr-2e-05+lora-r32+dropout-0.0" # fine-tuning, subtask only, 
         #"/home/work/AGI_NIH/checkpoints/ecot_libero/prism-dinosiglip-224px+mx-libero-90+n1+b8+x7/checkpoints/"
         #"step-050000-epoch-01-loss=0.0665.pt" # 90 task, full reasoning
@@ -93,8 +93,8 @@ class GenerateConfig:
     hf_token: Union[str, Path] = Path(".hf_token")              # Environment variable or Path to HF Token
     seed: int = 7                                    # Random Seed (for reproducibility)
 
-    reasoning_img: bool = False
-    use_reasoning: bool = False
+    reasoning_img: bool = True
+    use_reasoning: bool = True
     # fmt: on
 
 

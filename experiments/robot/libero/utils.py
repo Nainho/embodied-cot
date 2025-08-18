@@ -395,7 +395,7 @@ def get_vla_action(
         tokenizer = getattr(vla, "tokenizer", None)
         if tokenizer is None and hasattr(vla, "processor"):
             tokenizer = getattr(vla.processor, "tokenizer", None)
-        if tokenizer is not None:
+        #if tokenizer is not None:
             
         
     return action

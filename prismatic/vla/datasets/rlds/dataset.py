@@ -38,35 +38,35 @@ overwatch = initialize_overwatch(__name__)
 # Configure Tensorflow with *no GPU devices* (to prevent clobber with PyTorch)
 tf.config.set_visible_devices([], "GPU")
 
-TARGET_DEMOS = tf.constant([
-    "study_scene1_pick_up_the_book_and_place_it_in_the_left_compartment_of_the_caddy_demo.hdf5",
-    "study_scene2_pick_up_the_book_and_place_it_in_the_left_compartment_of_the_caddy_demo.hdf5",
-    "study_scene3_pick_up_the_book_and_place_it_in_the_left_compartment_of_the_caddy_demo.hdf5",
-], dtype=tf.string)
+# TARGET_DEMOS = tf.constant([
+#     "study_scene1_pick_up_the_book_and_place_it_in_the_left_compartment_of_the_caddy_demo.hdf5",
+#     "study_scene2_pick_up_the_book_and_place_it_in_the_left_compartment_of_the_caddy_demo.hdf5",
+#     "study_scene3_pick_up_the_book_and_place_it_in_the_left_compartment_of_the_caddy_demo.hdf5",
+# ], dtype=tf.string)
 
-def traj_in_target_demos(traj):
-    # meta_file_path는 길이 T 벡터 → 첫 원소만 확인
-    file_path0 = traj["meta_file_path"][0]
-    # 베이스네임 추출 후 소문자
-    base0 = tf.strings.lower(tf.strings.regex_replace(file_path0, r".*/", ""))
-    match = tf.reduce_any(tf.equal(base0, TARGET_DEMOS))
-    # 매칭될 때만 출력
-    # tf.cond(
-    #     match,
-    #     lambda: tf.print("[MATCHED]", base0, summarize=-1),
-    #     lambda: tf.no_op()
-    # )
-    return match
+# def traj_in_target_demos(traj):
+#     # meta_file_path는 길이 T 벡터 → 첫 원소만 확인
+#     file_path0 = traj["meta_file_path"][0]
+#     # 베이스네임 추출 후 소문자
+#     base0 = tf.strings.lower(tf.strings.regex_replace(file_path0, r".*/", ""))
+#     match = tf.reduce_any(tf.equal(base0, TARGET_DEMOS))
+#     # 매칭될 때만 출력
+#     # tf.cond(
+#     #     match,
+#     #     lambda: tf.print("[MATCHED]", base0, summarize=-1),
+#     #     lambda: tf.no_op()
+#     # )
+#     return match
 
-def traj_has_full_reasoning(traj):
-    # step-wise reasoning 문자열 텐서
-    rs = traj["reasoning"]
-    return tf.reduce_all(rs != "")
+# def traj_has_full_reasoning(traj):
+#     # step-wise reasoning 문자열 텐서
+#     rs = traj["reasoning"]
+#     return tf.reduce_all(rs != "")
 
-def traj_has_any_reasoning(traj):
-    # restructure() 이후 트라젝토리 dict에 'reasoning'이 들어있음 (shape [T], dtype string)
-    rs = traj["reasoning"]  # [T] tf.string
-    return tf.reduce_any(rs != "")
+# def traj_has_any_reasoning(traj):
+#     # restructure() 이후 트라젝토리 dict에 'reasoning'이 들어있음 (shape [T], dtype string)
+#     rs = traj["reasoning"]  # [T] tf.string
+#     return tf.reduce_any(rs != "")
 
 # ruff: noqa: B006
 def make_dataset_from_rlds(
@@ -739,24 +739,24 @@ def make_interleaved_dataset(
             dataset_statistics=all_dataset_statistics[dataset_kwargs["name"]],
         )
         # 1) 여기서 먼저 target demo만 남기는 trajectory-level filter
-        dataset = dataset.filter(traj_in_target_demos)
+        #dataset = dataset.filter(traj_in_target_demos)
     
         # 이제 restructure()가 끝난 결과이므로 reasoning 키가 있음
-        dataset = dataset.filter(traj_has_full_reasoning)  # or traj_has_full_reasoning
+        #dataset = dataset.filter(traj_has_full_reasoning)  # or traj_has_full_reasoning
         
-        filtered_stats = get_dataset_statistics(
-            dataset,
-            hash_dependencies=("filtered",) + tuple(sorted([d.decode() if isinstance(d, bytes) else d 
-                                                            for d in TARGET_DEMOS.numpy().tolist()])),
-            save_dir=None,   # 파일 저장 안 함 (원하면 임시 폴더 지정)
-        )
-        filtered_stats = tree_map(lambda x: x.item() if hasattr(x, "item") else x, filtered_stats)
+        # filtered_stats = get_dataset_statistics(
+        #     dataset,
+        #     hash_dependencies=("filtered",) + tuple(sorted([d.decode() if isinstance(d, bytes) else d 
+        #                                                     for d in TARGET_DEMOS.numpy().tolist()])),
+        #     save_dir=None,   # 파일 저장 안 함 (원하면 임시 폴더 지정)
+        # )
+        # filtered_stats = tree_map(lambda x: x.item() if hasattr(x, "item") else x, filtered_stats)
 
-        print("[Filtered Stats]", filtered_stats)
+        # print("[Filtered Stats]", filtered_stats)
         
-        ds_name = dataset_kwargs["name"]
-        all_dataset_statistics[ds_name] = filtered_stats
-        dataset_len = filtered_stats["num_transitions"]
+        # ds_name = dataset_kwargs["name"]
+        # all_dataset_statistics[ds_name] = filtered_stats
+        # dataset_len = filtered_stats["num_transitions"]
         
         dataset = apply_trajectory_transforms(
             dataset.repeat(),
