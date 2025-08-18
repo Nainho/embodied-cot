@@ -1,0 +1,28 @@
+Task suite: libero_3_among_90
+
+Task: pick up the book and place it in the left compartment of the caddy
+Starting episode 1...
+Saved rollout MP4 at path ./rollouts/2025_08_16/2025_08_16-11_23_55--episode=1--success=True--task=pick_up_the_book_and_place_it_in_the_left_compartm.mp4
+Success: True
+# episodes completed so far: 1
+# successes: 1 (100.0%)
+Current task success rate: 1.0
+Current total success rate: 1.0
+
+Task: pick up the book and place it in the left compartment of the caddy
+Starting episode 1...
+Saved rollout MP4 at path ./rollouts/2025_08_16/2025_08_16-11_23_55--episode=2--success=True--task=pick_up_the_book_and_place_it_in_the_left_compartm.mp4
+Success: True
+# episodes completed so far: 2
+# successes: 2 (100.0%)
+Current task success rate: 1.0
+Current total success rate: 1.0
+
+Task: pick up the book and place it in the left compartment of the caddy
+Starting episode 1...
+Saved rollout MP4 at path ./rollouts/2025_08_16/2025_08_16-11_23_55--episode=3--success=True--task=pick_up_the_book_and_place_it_in_the_left_compartm.mp4
+Success: True
+# episodes completed so far: 3
+# successes: 3 (100.0%)
+Current task success rate: 1.0
+Current total success rate: 1.0

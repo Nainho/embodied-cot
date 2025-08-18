@@ -25,10 +25,24 @@ import tensorflow as tf
 from libero.libero import get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
 
+import json
+
+from transformers import (
+    AutoConfig, AutoImageProcessor, AutoModelForVision2Seq, AutoProcessor
+)
+
+from prismatic.extern.hf.configuration_prismatic import OpenVLAConfig
+from prismatic.extern.hf.modeling_prismatic import OpenVLAForActionPrediction
+from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, PrismaticProcessor
+from prismatic.vla.action_tokenizer import ActionTokenizer
+
 ACTION_DIM = 7
 DATE = time.strftime("%Y_%m_%d")
 DATE_TIME = time.strftime("%Y_%m_%d-%H_%M_%S")
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+
+
+
 
 def get_libero_env(task, model_family, resolution=256):
     """Initializes and returns the LIBERO environment, along with the task description."""
@@ -68,17 +82,19 @@ def get_libero_image(obs, resize_size):
     if isinstance(resize_size, int):
         resize_size = (resize_size, resize_size)
     img = obs["agentview_image"]
-    img = img[::-1, ::-1]  # IMPORTANT: rotate 180 degrees to match train preprocessing
+    #img = img[::-1, ::-1]  # IMPORTANT: rotate 180 degrees to match train preprocessing  기존 상하좌우 반전 180
+    img = img[::-1] # 상하반전만
+    #img = img[:,::-1] # 좌우반전만
     img = resize_image(img, resize_size)
     return img
 
 
 def save_rollout_video(rollout_images, idx, success, task_description, log_file=None):
     """Saves an MP4 replay of an episode."""
-    rollout_dir = f"./rollouts/{DATE}"
+    rollout_dir = f"./rollouts/{DATE}/{DATE_TIME}"
     os.makedirs(rollout_dir, exist_ok=True)
     processed_task_description = task_description.lower().replace(" ", "_").replace("\n", "_").replace(".", "_")[:50]
-    mp4_path = f"{rollout_dir}/{DATE_TIME}--episode={idx}--success={success}--task={processed_task_description}.mp4"
+    mp4_path = f"{rollout_dir}/episode={idx}--success={success}--task={processed_task_description}.mp4"
     video_writer = imageio.get_writer(mp4_path, fps=30)
     for img in rollout_images:
         video_writer.append_data(img)
@@ -147,23 +163,78 @@ def get_image_resize_size(cfg):
     return resize_size
 
 
+def _is_hf_dir(path: str | Path) -> bool:
+    p = Path(path)
+    return p.is_dir() and (p / "model.safetensors.index.json").exists()
+
 def get_vla(cfg):
-    """Loads and returns a VLA model from checkpoint."""
-    # Prepare for model loading.
+    """Loads and returns a VLA model from checkpoint (HF dir or .pt)."""
     print(f"[*] Initializing Generation Playground with `{cfg.model_family}`")
     hf_token = cfg.hf_token.read_text().strip() if isinstance(cfg.hf_token, Path) else os.environ[cfg.hf_token]
     set_seed(cfg.seed)
-    # Load VLA checkpoint.
-    print(f"Loading VLM from checkpoint: {cfg.pretrained_checkpoint}")
-    vla = load_vla(cfg.pretrained_checkpoint, hf_token=hf_token, load_for_training=False)
-    for param in vla.parameters():
-        assert param.dtype == torch.float32, f"Loaded VLM parameter not in full precision: {param}"
-    # Cast to half precision.
-    vla.vision_backbone.to(dtype=vla.vision_backbone.half_precision_dtype)
-    vla.llm_backbone.to(dtype=vla.llm_backbone.half_precision_dtype)
-    vla.to(dtype=vla.llm_backbone.half_precision_dtype)
-    vla.to(DEVICE)
-    return vla
+
+    ckpt = Path(cfg.pretrained_checkpoint)
+    print(f"Loading VLM from checkpoint: {ckpt}")
+    
+    # === Case A: HF 포맷 디렉터리 ===
+    if _is_hf_dir(ckpt):
+        print("[HF] Detected Hugging Face-format directory. Loading via AutoClasses...")
+
+        # 1) AutoClass 등록 (허브 푸시 모델이면 생략 가능 / 로컬은 필요)
+        AutoConfig.register("openvla", OpenVLAConfig)
+        AutoImageProcessor.register(OpenVLAConfig, PrismaticImageProcessor)
+        AutoProcessor.register(OpenVLAConfig, PrismaticProcessor)
+        AutoModelForVision2Seq.register(OpenVLAConfig, OpenVLAForActionPrediction)
+
+        # 2) Processor & Model 로드 (처음엔 fp32로 로드해 기존 assert와 정합)
+        processor = AutoProcessor.from_pretrained(str(ckpt), trust_remote_code=True)
+        vla = AutoModelForVision2Seq.from_pretrained(
+            str(ckpt),
+            attn_implementation="flash_attention_2",
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=True,
+            trust_remote_code=True,
+        )
+        vla.to(DEVICE)
+        vla.eval()
+
+        # 평가 파이프라인에서 필요할 수 있는 부속을 모델에 꽂아둠
+        vla.processor = processor
+        ds_stats = ckpt / "dataset_statistics.json"
+        vla.norm_stats = json.loads(ds_stats.read_text()) if ds_stats.exists() else None
+        vla.action_tokenizer = ActionTokenizer(processor.tokenizer)
+
+        return vla
+
+    # === Case B: 기존 .pt 체크포인트 경로 ===
+    else:
+        vla = load_vla(str(ckpt), hf_token=hf_token, load_for_training=False)
+        for param in vla.parameters():
+            assert param.dtype == torch.float32, f"Loaded VLM parameter not in full precision: {param}"
+        # Cast to half precision.
+        vla.vision_backbone.to(dtype=vla.vision_backbone.half_precision_dtype)
+        vla.llm_backbone.to(dtype=vla.llm_backbone.half_precision_dtype)
+        vla.to(dtype=vla.llm_backbone.half_precision_dtype)
+        vla.to(DEVICE)
+        return vla
+    
+# def get_vla(cfg):
+#     """Loads and returns a VLA model from checkpoint."""
+#     # Prepare for model loading.
+#     print(f"[*] Initializing Generation Playground with `{cfg.model_family}`")
+#     hf_token = cfg.hf_token.read_text().strip() if isinstance(cfg.hf_token, Path) else os.environ[cfg.hf_token]
+#     set_seed(cfg.seed)
+#     # Load VLA checkpoint.
+#     print(f"Loading VLM from checkpoint: {cfg.pretrained_checkpoint}")
+#     vla = load_vla(cfg.pretrained_checkpoint, hf_token=hf_token, load_for_training=False)
+#     for param in vla.parameters():
+#         assert param.dtype == torch.float32, f"Loaded VLM parameter not in full precision: {param}"
+#     # Cast to half precision.
+#     vla.vision_backbone.to(dtype=vla.vision_backbone.half_precision_dtype)
+#     vla.llm_backbone.to(dtype=vla.llm_backbone.half_precision_dtype)
+#     vla.to(dtype=vla.llm_backbone.half_precision_dtype)
+#     vla.to(DEVICE)
+#     return vla
 
 
 def get_model(cfg):
@@ -273,14 +344,61 @@ def get_octo_policy_function(model):
     return policy_fn
 
 
-def get_vla_action(vla, obs, task_label, **kwargs):
-    """Generates an action with the VLA policy."""
+# def get_vla_action(vla, obs, task_label, **kwargs):
+#     """Generates an action with the VLA policy."""
+#     image = Image.fromarray(obs["full_image"])
+#     image = image.convert("RGB")
+#     assert image.size[0] == image.size[1]
+#     action = vla.predict_action(image, task_label, do_sample=False, **kwargs)
+#     return action
+
+
+def get_vla_action(
+    vla,
+    obs,
+    task_label: str,
+    **kwargs,
+):
+    """
+    Generates an action with the VLA policy.
+    - .pt 모델: 기존과 동일하게 PIL Image + task_label을 그대로 predict_action에 전달
+    - HF 포맷 모델: processor를 통해 PIL 이미지와 instruction을 처리하도록 래핑 후 호출
+    """
+    # 1) PIL RGB 이미지로 변환
     image = Image.fromarray(obs["full_image"])
     image = image.convert("RGB")
-    assert image.size[0] == image.size[1]
-    action = vla.predict_action(image, task_label, do_sample=False, **kwargs)
-    return action
+    assert image.size[0] == image.size[1], "input image must be square"
 
+    # 2) HF 포맷 모델인지 판단 (vla.processor 존재 여부)
+    processor = getattr(vla, "processor", None)
+
+    # === Case A: .pt 모델 ===
+    if processor is None:
+        # 기존 .pt 모델 방식 호출
+        action = vla.predict_action(image, task_label, do_sample=False, **kwargs)
+        return action
+
+    # === Case B: HF 포맷 모델 ===
+    prompt = f"In: What action should the robot take to {task_label.lower()}?\nOut:"
+    info_dict = kwargs.pop("info_dict", None)
+
+    # Process inputs.
+    inputs = processor(prompt, image).to(DEVICE, dtype=torch.bfloat16)
+
+    out = vla.predict_action(**inputs, do_sample=False)
+    if isinstance(out, tuple):
+        action, generated_ids = out
+    else:
+        action = out
+        generated_ids = None
+    if(info_dict is not None) and (generated_ids is not None):
+        tokenizer = getattr(vla, "tokenizer", None)
+        if tokenizer is None and hasattr(vla, "processor"):
+            tokenizer = getattr(vla.processor, "tokenizer", None)
+        if tokenizer is not None:
+            
+        
+    return action
 
 def get_action(cfg, model, obs, task_label, policy_function=None, **kwargs):
     """Queries the model to get an action."""
@@ -307,18 +425,6 @@ def refresh_obs(obs, env):
     return obs
 
 
-def write_text(image, text, size, location, line_max_length):
-    next_x, next_y = location
-
-    for line in text:
-        x, y = next_x, next_y
-
-        for i in range(0, len(line), line_max_length):
-            line_chunk = line[i : i + line_max_length]
-            cv2.putText(image, line_chunk, (x, y), cv2.FONT_HERSHEY_SIMPLEX, size, (255, 255, 255), 1, cv2.LINE_AA)
-            y += 30
-
-        next_y = max(y, next_y + 50)
 
 
 def split_reasoning(text, tags):
@@ -406,39 +512,109 @@ def draw_bboxes(img, bboxes, original_size=(224, 224)):
         )
 
         
-def write_text(image, text, size, location, line_max_length):
-    next_x, next_y = location
+# def write_text(image, text, size, location, line_max_length):
+#     next_x, next_y = location
 
+#     for line in text:
+#         x, y = next_x, next_y
+
+#         for i in range(0, len(line), line_max_length):
+#             line_chunk = line[i : i + line_max_length]
+#             cv2.putText(image, line_chunk, (x, y), cv2.FONT_HERSHEY_SIMPLEX, size, (255, 255, 255), 1, cv2.LINE_AA)
+#             y += 18
+
+#         next_y = max(y, next_y + 30)
+
+# # reasoning 텍스트 이미지를 시각화한 후 실제 이미지 높이에 맞춰 resize
+# def make_reasoning_image(text, target_height=224):
+#     """
+#     - text: reasoning 텍스트
+#     - target_height: left 이미지의 높이와 맞추기 위한 기준 (ex. 224)
+#     """
+#     base = np.zeros((224, 360, 3), dtype=np.uint8)
+
+#     tags = [f" {tag}" for tag in get_cot_tags_list()]
+#     reasoning = split_reasoning(text, tags)
+#     text_lines = [tag + reasoning[tag] for tag in tags[:-1] if tag in reasoning]
+
+#     write_text(base, text_lines, 0.2, (10, 30), 75)
+
+#     # height 기준으로 resize (비율 유지)
+#     orig_h, orig_w = base.shape[:2]
+#     new_width = int((orig_w / orig_h) * target_height)
+#     resized = cv2.resize(base, (new_width, target_height), interpolation=cv2.INTER_AREA)
+
+#     #return resized, get_metadata(reasoning)
+#     return resized
+
+
+def write_text(image, text, font_scale, location, line_max_length):
+    x0, y0 = location
+    # 실제 글자 높이/폭으로 줄 간격 계산
+    (sample_w, sample_h), _ = cv2.getTextSize("Hg", cv2.FONT_HERSHEY_SIMPLEX, font_scale, 1)
+    line_step = sample_h + max(6, int(6 * font_scale))   # 최소 여백 6px 보장
+
+    y = y0
     for line in text:
-        x, y = next_x, next_y
-
+        # 고정 글자수 기반 wrap
         for i in range(0, len(line), line_max_length):
-            line_chunk = line[i : i + line_max_length]
-            cv2.putText(image, line_chunk, (x, y), cv2.FONT_HERSHEY_SIMPLEX, size, (255, 255, 255), 1, cv2.LINE_AA)
-            y += 18
+            chunk = line[i:i+line_max_length]
+            cv2.putText(image, chunk, (x0, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale,
+                        (255, 255, 255), 1, cv2.LINE_AA)
+            y += line_step
+        # 태그 사이 추가 여백
+        y += int(line_step * 0.3)
 
-        next_y = max(y, next_y + 30)
-
-# reasoning 텍스트 이미지를 시각화한 후 실제 이미지 높이에 맞춰 resize
-def make_reasoning_image(text, target_height=224):
-    """
-    - text: reasoning 텍스트
-    - target_height: left 이미지의 높이와 맞추기 위한 기준 (ex. 224)
-    """
-    base = np.zeros((224, 360, 3), dtype=np.uint8)
-
+def make_reasoning_image(
+    text,
+    target_height=224,
+    font_scale=0.4,
+    line_max_length=75,
+    panel_width_px=None,               # ← 원하는 가로 픽셀 직접 지정(없으면 자동)
+    exclude_tags=(" VISIBLE OBJECTS",) # ← 제외할 태그(문구 앞 공백 포함)
+):
+    # 태그 분해
     tags = [f" {tag}" for tag in get_cot_tags_list()]
     reasoning = split_reasoning(text, tags)
-    text_lines = [tag + reasoning[tag] for tag in tags[:-1] if tag in reasoning]
 
-    write_text(base, text_lines, 0.2, (10, 30), 70)
+    # 태그 필터링(원하면 VISIBLE OBJECTS 등 제외)
+    text_lines = []
+    for tag in tags[:-1]:
+        if tag in reasoning:
+            if exclude_tags and any(tag.startswith(ex) for ex in exclude_tags):
+                continue
+            text_lines.append(tag + reasoning[tag])
 
-    # height 기준으로 resize (비율 유지)
-    orig_h, orig_w = base.shape[:2]
-    new_width = int((orig_w / orig_h) * target_height)
-    resized = cv2.resize(base, (new_width, target_height), interpolation=cv2.INTER_AREA)
+    # 실제 줄바꿈을 반영해 "그려질 줄 리스트" 미리 계산
+    wrapped = []
+    for line in text_lines:
+        for i in range(0, len(line), line_max_length):
+            wrapped.append(line[i:i+line_max_length])
 
-    return resized, get_metadata(reasoning)
+    # 글자 픽셀 폭/높이 측정
+    (char_w_est, char_h_est), _ = cv2.getTextSize("M", cv2.FONT_HERSHEY_SIMPLEX, font_scale, 1)
+    line_step = char_h_est + max(6, int(6 * font_scale))
+
+    # 패널 폭 계산: 직접 지정이 있으면 우선, 없으면 "가장 긴 조각" 기준 + 여백
+    max_line_len = max((len(s) for s in wrapped), default=line_max_length)
+    if panel_width_px is None:
+        panel_width_px = max(360, 20 + max_line_len * char_w_est + 20)  # 좌우 여백 20px
+
+    # 패널 높이 계산: 줄 수 × 줄 간격 + 상하 여백
+    total_lines = len(wrapped) + int(0.3 * len(text_lines))  # 태그 간 여백 반영
+    panel_height_px = max(224, 30 + total_lines * line_step + 30)
+
+    # 캔버스 생성
+    base = np.zeros((panel_height_px, panel_width_px, 3), dtype=np.uint8)
+
+    # 텍스트 그리기
+    write_text(base, text_lines, font_scale, (10, 30), line_max_length)
+
+    # 최종 resize(높이만 target_height로 맞춤, 가로는 비율 유지)
+    H, W = base.shape[:2]
+    resized = cv2.resize(base, (panel_width_px, target_height), interpolation=cv2.INTER_AREA)
+    return resized
+
 
 def normalize_gripper_action(action, binarize=True):
     """

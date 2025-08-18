@@ -49,6 +49,9 @@ from experiments.robot.libero.utils import (
 )
 
 
+import traceback
+
+
 @dataclass
 class GenerateConfig:
     # fmt: off
@@ -58,8 +61,12 @@ class GenerateConfig:
     #################################################################################################################
     model_family: str = "llava"                    # Model family
     pretrained_checkpoint: Union[str, Path] = Path(             # Pretrained VLA checkpoint to load
-        "/home/work/AGI_NIH/checkpoints/ecot_libero/prism-dinosiglip-224px+mx-libero-90+n1+b8+x7/checkpoints/"
-        "step-050000-epoch-01-loss=0.0665.pt"
+        #"/home/work/AGI_NIH/checkpoints/ecot_libero/prism-dinosiglip-224px+mx-libero-90+n1+b16+x7/checkpoints/"
+        #"step-010000-epoch-72-loss=0.0171.pt"  # 3 task, subtask only
+        "/home/work/AGI_NIH/checkpoints/ecot_libero_finetune/ecot-openvla-7b-oxe+libero_90+b16+lr-0.0005+lora-r32+dropout-0.0" # fine-tuning, full reasoning
+        #"/home/work/AGI_NIH/checkpoints/ecot_libero_finetune/openvla-7b+libero_90+b16+lr-2e-05+lora-r32+dropout-0.0" # fine-tuning, subtask only, 
+        #"/home/work/AGI_NIH/checkpoints/ecot_libero/prism-dinosiglip-224px+mx-libero-90+n1+b8+x7/checkpoints/"
+        #"step-050000-epoch-01-loss=0.0665.pt" # 90 task, full reasoning
     )
     load_in_8bit: bool = False                       # (For OpenVLA only) Load with 8-bit quantization
     load_in_4bit: bool = False                       # (For OpenVLA only) Load with 4-bit quantization
@@ -87,7 +94,7 @@ class GenerateConfig:
     seed: int = 7                                    # Random Seed (for reproducibility)
 
     reasoning_img: bool = False
-    use_reasoning: bool = True
+    use_reasoning: bool = False
     # fmt: on
 
 
@@ -167,6 +174,8 @@ def eval_libero(cfg: GenerateConfig) -> None:
                 max_steps = 520  # longest training demo has 505 steps
             elif cfg.task_suite_name == "libero_90":
                 max_steps = 400  # longest training demo has 373 steps
+            elif cfg.task_suite_name == "libero_3_among_90":
+                max_steps = 400  # longest training demo has 373 steps
 
             print(f"Starting episode {task_episodes+1}...")
             log_file.write(f"Starting episode {task_episodes+1}...\n")
@@ -205,7 +214,17 @@ def eval_libero(cfg: GenerateConfig) -> None:
                     )
                     if cfg.use_reasoning:
                         try:
-                            reasoning_img, metadata = make_reasoning_image(info_dict["decoded_tokens"])
+                            #reasoning_img, metadata = make_reasoning_image(info_dict["decoded_tokens"])
+                            #reasoning_img = make_reasoning_image(info_dict["decoded_tokens"])
+                            reasoning_img = make_reasoning_image(
+                                info_dict["decoded_tokens"],
+                                target_height=img.shape[0],
+                                font_scale=0.3,
+                                line_max_length=80,
+                                panel_width_px=550,
+                                exclude_tags=(),
+                                #exclude_tags=(" VISIBLE OBJECTS", " GRIPPER POSITION")  # ← 보기 불필요한 태그 제외
+                            )
                             #draw_gripper(img, metadata["gripper"])
                             #draw_bboxes(img, metadata["bboxes"])
                             #draw_interactive(img, getattr(model, "use_interactive", False))
@@ -233,6 +252,8 @@ def eval_libero(cfg: GenerateConfig) -> None:
 
                 except Exception as e:
                     print(f"Caught exception: {e}")
+                    traceback.print_exc()
+                    raise
                     log_file.write(f"Caught exception: {e}\n")
                     break
 

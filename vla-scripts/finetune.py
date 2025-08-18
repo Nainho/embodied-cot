@@ -158,7 +158,7 @@ def finetune(cfg: FinetuneConfig) -> None:
     vla = AutoModelForVision2Seq.from_pretrained(
         cfg.vla_path,
         torch_dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2",  ## 추가
+        #attn_implementation="flash_attention_2",  ## 추가
         quantization_config=quantization_config,
         low_cpu_mem_usage=True,
         trust_remote_code=True,
